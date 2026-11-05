@@ -1,0 +1,18 @@
+name: Verify
+on:
+  push:
+  pull_request:
+
+jobs:
+  jazzy:
+    runs-on: ubuntu-24.04
+    container: ros:jazzy-ros-base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test
+        shell: bash
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          cmake -S . -B build/jazzy -DBUILD_TESTING=ON
+          cmake --build build/jazzy --parallel 2
+          ctest --test-dir build/jazzy --output-on-failure
