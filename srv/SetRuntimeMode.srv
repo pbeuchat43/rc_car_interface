@@ -1,0 +1,22 @@
+# Flat fields let a generic runtime provider validate the complete request.
+# stamp_ns is system-clock time in Unix nanoseconds.
+uint8 MANUAL=1
+uint8 AUTO=2
+uint8 HOLD=3
+uint8 NONE=0
+uint8 HOST=1
+uint8 RC=2
+uint8 SUM=3
+int64 stamp_ns
+string<=16 session
+uint64 generation
+uint8 mode
+uint8 drive_choice
+uint8 steer_choice
+---
+bool accepted
+string result
+uint64 resulting_generation
+bool observed_fresh
+string observed_mode
+uint64 observed_generation

@@ -128,15 +128,15 @@ public:
     }
 
     wire::Line pan(uint64_t now, int demand) {
-        if (!ready(now) || view_.status->mode == wire::Mode::bench || !wire::demand(demand)) return {};
+        if (!ready(now) || view_.status->mode == wire::Mode::maintenance || !wire::demand(demand)) return {};
         return wire::encode(wire::Pan{mutation(), demand});
     }
 
-    wire::Line bench(uint64_t now, wire::Operation op, uint16_t pulse = 0) {
+    wire::Line maintenance(uint64_t now, wire::Operation op, uint16_t pulse = 0) {
         if (!ready(now)) return {};
         const auto key = mutation();
         expect(key.seq);
-        return wire::encode(wire::Bench{key, view_.status->generation, op, pulse});
+        return wire::encode(wire::Maintenance{key, view_.status->generation, op, pulse});
     }
 
     std::optional<wire::Result> take_result() {
@@ -147,7 +147,7 @@ public:
 
 private:
     wire::Mutation mutation() {
-        if (seq_ == UINT32_MAX) throw std::runtime_error("RC1 sequence exhausted");
+        if (seq_ == UINT32_MAX) throw std::runtime_error("RCPv1 sequence exhausted");
         return {view_.session, ++seq_, view_.status->tick};
     }
     void expect(uint32_t seq) { waiting_for_ = seq; result_.reset(); }

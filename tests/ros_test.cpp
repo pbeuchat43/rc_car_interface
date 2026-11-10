@@ -127,8 +127,10 @@ int main(int argc, char **argv) {
     const auto drive = test->create_publisher<DriveCommand>("/rc_car_interface/command", qos);
     const auto pan = test->create_publisher<PanCommand>("/rc_car_interface/pan_command", qos);
     const auto mode = test->create_client<SetMode>("/rc_car_interface/set_mode");
+    const auto runtime_mode = test->create_client<SetRuntimeMode>("/rc_car_interface/set_runtime_mode");
     std::thread spin([&] { executor.spin(); });
-    wait([&] { return observed().fresh && mode->service_is_ready() && drive->get_subscription_count(); });
+    wait([&] { return observed().fresh && mode->service_is_ready() && runtime_mode->service_is_ready() &&
+                      drive->get_subscription_count(); });
     const auto request = [&](uint8_t mode_value) {
         auto req = std::make_shared<SetMode::Request>();
         const auto snap = observed();
@@ -160,8 +162,20 @@ int main(int argc, char **argv) {
     pan->publish(pan_target);
     wait([&] { return observed().pan_pwm_us == 1250; });
     CHECK(observed().drive_pwm_us == 1500);
+    const auto runtime_hold = [&](int64_t offset) {
+        auto req = std::make_shared<SetRuntimeMode::Request>();
+        const auto snap = observed();
+        req->stamp_ns = test->now().nanoseconds() + offset;
+        req->session = snap.session;
+        req->generation = snap.generation;
+        req->mode = SetRuntimeMode::Request::HOLD;
+        auto result = runtime_mode->async_send_request(req);
+        CHECK(result.wait_for(2s) == std::future_status::ready);
+        return result.get();
+    };
+    CHECK(runtime_hold(-1000000000)->result == "STALE");
     pico.drop_next_result = true;
-    const auto hold = request(SetMode::Request::HOLD);
+    const auto hold = runtime_hold(0);
     CHECK(!hold->accepted && hold->result == "UNCERTAIN" && hold->observed_mode == "HOLD");
     CHECK(pico.mode_count == 2);
     executor.cancel();

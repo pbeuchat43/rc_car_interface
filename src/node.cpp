@@ -3,6 +3,7 @@
 #include "rc_car_interface/msg/pan_command.hpp"
 #include "rc_car_interface/msg/vehicle_status.hpp"
 #include "rc_car_interface/srv/set_mode.hpp"
+#include "rc_car_interface/srv/set_runtime_mode.hpp"
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include <atomic>
@@ -35,6 +36,7 @@ using DriveCommand = rc_car_interface::msg::DriveCommand;
 using PanCommand = rc_car_interface::msg::PanCommand;
 using VehicleStatus = rc_car_interface::msg::VehicleStatus;
 using SetMode = rc_car_interface::srv::SetMode;
+using SetRuntimeMode = rc_car_interface::srv::SetRuntimeMode;
 
 struct Targets {
     uint64_t generation, until;
@@ -93,7 +95,7 @@ public:
             const auto until = deadline(ns(msg->stamp), system_ns(), steady_ms());
             std::lock_guard lock(mutex_);
             if (!demand || !until || !live() || msg->session != observation_.session ||
-                observation_.status->mode == wire::Mode::bench) {
+                observation_.status->mode == wire::Mode::maintenance) {
                 ++rejected_;
                 return;
             }
@@ -101,7 +103,14 @@ public:
         });
         mode_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
         mode_service_ = create_service<SetMode>("~/set_mode",
-            [this](const SetMode::Request::SharedPtr req, SetMode::Response::SharedPtr res) { mode(*req, *res); },
+            [this](const SetMode::Request::SharedPtr req, SetMode::Response::SharedPtr res) {
+                mode(ns(req->stamp), *req, *res);
+            },
+            rclcpp::ServicesQoS(), mode_group_);
+        runtime_mode_service_ = create_service<SetRuntimeMode>("~/set_runtime_mode",
+            [this](const SetRuntimeMode::Request::SharedPtr req, SetRuntimeMode::Response::SharedPtr res) {
+                mode(req->stamp_ns, *req, *res);
+            },
             rclcpp::ServicesQoS(), mode_group_);
         status_pub_ = create_publisher<VehicleStatus>("~/status", qos);
         diagnostics_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>("~/diagnostics", 1);
@@ -119,9 +128,10 @@ public:
 private:
     bool live() const { return observation_.ready && observation_.status.has_value(); }
 
-    void mode(const SetMode::Request &req, SetMode::Response &response) {
+    template<class RequestMessage, class ResponseMessage>
+    void mode(int64_t stamp_ns, const RequestMessage &req, ResponseMessage &response) {
         const auto now = steady_ms();
-        const auto until = deadline(ns(req.stamp), system_ns(), now);
+        const auto until = deadline(stamp_ns, system_ns(), now);
         std::unique_lock lock(mutex_);
         if (!until) response.result = "STALE";
         else if (!live() || req.session != observation_.session) response.result = "UNAVAILABLE";
@@ -331,6 +341,7 @@ private:
     rclcpp::Subscription<DriveCommand>::SharedPtr drive_sub_;
     rclcpp::Subscription<PanCommand>::SharedPtr pan_sub_;
     rclcpp::Service<SetMode>::SharedPtr mode_service_;
+    rclcpp::Service<SetRuntimeMode>::SharedPtr runtime_mode_service_;
     rclcpp::Publisher<VehicleStatus>::SharedPtr status_pub_;
     rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostics_pub_;
     rclcpp::TimerBase::SharedPtr status_timer_, diagnostic_timer_;

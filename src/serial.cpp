@@ -94,7 +94,7 @@ Port::Port(const fs::path &path) {
 }
 
 Port::~Port() {
-    // Close with HUPCL. Dropping an unsent tail cannot become a valid RC1 frame.
+    // Close with HUPCL. Dropping an unsent tail cannot become a valid RCPv1 frame.
     tcflush(fd_, TCIOFLUSH);
     ::close(fd_);
 }

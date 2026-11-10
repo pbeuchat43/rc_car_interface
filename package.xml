@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>rc_car_interface</name>
-  <version>0.1.0</version>
-  <description>ROS 2 interface for an RC1 Pico vehicle controller.</description>
+  <version>0.3.0</version>
+  <description>ROS 2 interface for an RCPv1 Pico vehicle controller.</description>
   <maintainer email="pbeuchat@unimelb.edu.au">Paul N. Beuchat</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>

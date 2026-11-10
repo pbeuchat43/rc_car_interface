@@ -10,25 +10,26 @@
 namespace rc_car::wire {
 
 using Text = std::string_view;
+constexpr Text frame_marker = "@RCPv1";
 constexpr std::size_t max_frame = 256;
 constexpr int full = 10000;
 constexpr uint64_t frame_timeout_ms = 100;
 constexpr uint64_t status_timeout_ms = 150;
 constexpr uint64_t status_period_ms = 40;
 
-enum class Mode { neutral, manual, automatic, hold, bench };
+enum class Mode { neutral, manual, automatic, hold, maintenance };
 enum class Choice { none, host, rc, sum };
 enum class Rc { unknown, good, bad };
 enum class Reason { none, rc_unknown, rc_bad, wait_neutral, wait_drive, rc_lost, rc_returned,
-                    drive_timeout, link_lost, requested, fault, bench_timeout, bench_abort, new_choices };
+                    drive_timeout, link_lost, requested, fault, maintenance_timeout, maintenance_abort, new_choices };
 enum class Code { ok, wrong_generation, stale, conflict, bad_range, bad_sequence };
 enum class Operation { enter, pulse, abort, exit };
 
-constexpr std::array mode_names{"NEUTRAL", "MANUAL", "AUTO", "HOLD", "BENCH"};
+constexpr std::array mode_names{"NEUTRAL", "MANUAL", "AUTO", "HOLD", "MAINTENANCE"};
 constexpr std::array choice_names{"NONE", "HOST", "RC", "SUM"};
 constexpr std::array rc_names{"UNKNOWN", "GOOD", "BAD"};
 constexpr std::array reason_names{"NONE", "RC_UNKNOWN", "RC_BAD", "WAIT_NEUTRAL", "WAIT_DRIVE", "RC_LOST",
-    "RC_RETURNED", "DRIVE_TIMEOUT", "LINK_LOST", "REQUESTED", "FAULT", "BENCH_TIMEOUT", "BENCH_ABORT", "NEW_CHOICES"};
+    "RC_RETURNED", "DRIVE_TIMEOUT", "LINK_LOST", "REQUESTED", "FAULT", "MAINTENANCE_TIMEOUT", "MAINTENANCE_ABORT", "NEW_CHOICES"};
 constexpr std::array code_names{"OK", "WRONG_GENERATION", "STALE", "CONFLICT", "BAD_RANGE", "BAD_SEQUENCE"};
 constexpr std::array operation_names{"ENTER", "PULSE", "ABORT", "EXIT"};
 constexpr auto &names(Mode) { return mode_names; }
@@ -53,7 +54,7 @@ struct ModeRequest {
 };
 struct Drive { Mutation key; uint64_t generation{}; int drive{}, steer{}; };
 struct Pan { Mutation key; int demand{}; };
-struct Bench { Mutation key; uint64_t generation{}; Operation operation{}; uint16_t pulse{}; };
+struct Maintenance { Mutation key; uint64_t generation{}; Operation operation{}; uint16_t pulse{}; };
 struct Result { Text session; uint32_t seq{}; Code code{}; uint64_t generation{}; };
 struct Status {
     Text session;
@@ -167,14 +168,17 @@ private:
 class Fields {
 public:
     explicit Fields(Text line) {
-        if (line.size() >= max_frame || line.substr(0, 5) != "@RC1,") return;
+        constexpr auto fields_begin = frame_marker.size() + 1;
+        if (line.size() <= fields_begin || line.size() >= max_frame ||
+            line.substr(0, frame_marker.size()) != frame_marker || line[frame_marker.size()] != ',') return;
         const auto comma = line.rfind(',');
+        if (comma < fields_begin) return;
         const auto checksum = line.substr(comma + 1);
         if (!hex(checksum, 8)) return;
         uint32_t expected = 0;
         for (const char c : checksum) expected = expected * 16 + (c <= '9' ? c - '0' : c - 'A' + 10);
         if (crc32(line.substr(0, comma + 1)) != expected) return;
-        fields_ = line.substr(5, comma - 4);
+        fields_ = line.substr(fields_begin, comma + 1 - fields_begin);
         type_ = take();
     }
     Text type() const { return type_; }
@@ -232,8 +236,8 @@ inline bool read(Fields &f, Pan &x) {
     return f.type() == "PAN" && prefix(f, x.key) && f.number(x.key.tick) && f.number(x.demand) && f.done();
 }
 
-inline bool read(Fields &f, Bench &x) {
-    return f.type() == "BENCH" && prefix(f, x.key) && f.number(x.generation) && f.number(x.key.tick) &&
+inline bool read(Fields &f, Maintenance &x) {
+    return f.type() == "MAINTENANCE" && prefix(f, x.key) && f.number(x.generation) && f.number(x.key.tick) &&
         f.enumeration(x.operation) && f.number(x.pulse) && f.done();
 }
 
@@ -262,7 +266,7 @@ struct Line {
 class Writer {
 public:
     template<class... T> Line frame(Text type, T... fields) {
-        add("@RC1");
+        add(frame_marker);
         add(type);
         (add(fields), ...);
         if (line_.size > max_frame - 9 || failed_) return {};
@@ -307,8 +311,8 @@ inline Line encode(Drive x) {
     return Writer{}.frame("DRIVE", x.key.session, x.key.seq, x.generation, x.key.tick, x.drive, x.steer);
 }
 inline Line encode(Pan x) { return Writer{}.frame("PAN", x.key.session, x.key.seq, x.key.tick, x.demand); }
-inline Line encode(Bench x) {
-    return Writer{}.frame("BENCH", x.key.session, x.key.seq, x.generation, x.key.tick, x.operation, x.pulse);
+inline Line encode(Maintenance x) {
+    return Writer{}.frame("MAINTENANCE", x.key.session, x.key.seq, x.generation, x.key.tick, x.operation, x.pulse);
 }
 inline Line encode(Result x) { return Writer{}.frame("RESULT", x.session, x.seq, x.code, x.generation); }
 inline Line encode(Status x) {

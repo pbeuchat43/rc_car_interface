@@ -103,8 +103,13 @@ int main(int argc, char **argv) {
     CHECK(argc == 2);
     const auto golden = fixture(argv[1], "drive");
     CHECK(encode(Drive{{challenge, 2, 1234}, 7, -2500, 500}).view() == golden);
+    const auto pulse = fixture(argv[1], "maintenance");
+    CHECK(encode(Maintenance{{challenge, 3, 1234}, 7, Operation::pulse, 1700}).view() == pulse);
+    Fields fields(Text(pulse).substr(0, pulse.size() - 1));
+    Maintenance maintenance;
+    CHECK(read(fields, maintenance) && maintenance.operation == Operation::pulse && maintenance.pulse == 1700);
     discovery();
     session_behavior();
     pty_round_trip(argv[1]);
-    std::cout << "RC1 host codec, freshness, discovery and PTY checks passed\n";
+    std::cout << "RCPv1 host codec, freshness, discovery and PTY checks passed\n";
 }

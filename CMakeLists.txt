@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(rc_car_interface VERSION 0.1.0 LANGUAGES C CXX)
+project(rc_car_interface VERSION 0.3.0 LANGUAGES C CXX)
 option(RC_CAR_STANDALONE "Build the Linux transport and tests without ROS" OFF)
 find_package(Threads REQUIRED)
 
@@ -7,9 +7,12 @@ add_library(rc_car_link STATIC src/serial.cpp)
 target_compile_features(rc_car_link PUBLIC cxx_std_17)
 target_include_directories(rc_car_link PUBLIC include)
 target_compile_options(rc_car_link PRIVATE -Wall -Wextra -Werror)
-add_executable(rc_car_bench_link src/bench_link.cpp)
-target_compile_options(rc_car_bench_link PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(rc_car_bench_link PRIVATE rc_car_link Threads::Threads)
+add_executable(rc_car_maintenance_link src/maintenance_link.cpp)
+target_compile_options(rc_car_maintenance_link PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(rc_car_maintenance_link PRIVATE rc_car_link Threads::Threads)
+add_executable(rc_car_ctl src/ctl.cpp)
+target_compile_options(rc_car_ctl PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(rc_car_ctl PRIVATE rc_car_link Threads::Threads)
 
 if(RC_CAR_STANDALONE OR BUILD_TESTING)
   enable_testing()
@@ -35,6 +38,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PanCommand.msg"
   "msg/VehicleStatus.msg"
   "srv/SetMode.srv"
+  "srv/SetRuntimeMode.srv"
   DEPENDENCIES builtin_interfaces
 )
 rosidl_get_typesupport_target(cpp_typesupport ${PROJECT_NAME} rosidl_typesupport_cpp)
@@ -53,7 +57,7 @@ if(BUILD_TESTING)
     "ROS_DOMAIN_ID=161;ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST;LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{LD_LIBRARY_PATH}")
 endif()
 
-install(TARGETS vehicle_interface rc_car_bench_link DESTINATION lib/${PROJECT_NAME})
+install(TARGETS vehicle_interface rc_car_maintenance_link rc_car_ctl DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()
